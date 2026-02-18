@@ -115,6 +115,45 @@ app.get('/', (c) => c.text('AI Gateway says hey!'));
 // Use prettyJSON middleware for all routes
 app.use('*', prettyJSON());
 
+// --- Gateway API Key Authentication ---
+// Requires a valid x-gateway-api-key header on all API routes.
+// Keys are loaded from the GATEWAY_API_KEYS env var (comma-separated).
+// The /public/ UI route is excluded so the dashboard still works.
+const validGatewayKeys = new Set(
+  (process.env.GATEWAY_API_KEYS || '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean)
+);
+
+app.use('*', async (c: Context, next) => {
+  // Skip auth for the UI dashboard and health check
+  const path = new URL(c.req.url).pathname;
+  if (path === '/' || path.startsWith('/public')) {
+    return next();
+  }
+
+  // If no keys are configured, skip auth (don't lock yourself out)
+  if (validGatewayKeys.size === 0) {
+    return next();
+  }
+
+  const apiKey = c.req.header('x-gateway-api-key');
+  if (!apiKey || !validGatewayKeys.has(apiKey)) {
+    return c.json(
+      {
+        error: {
+          message: 'Unauthorized: invalid or missing x-gateway-api-key',
+          type: 'authentication_error',
+        },
+      },
+      401
+    );
+  }
+
+  return next();
+});
+
 // Middleware to inject API keys from conf.json integrations
 app.use('*', async (c: Context, next) => {
   const provider = c.req.header(`x-${POWERED_BY}-provider`);
