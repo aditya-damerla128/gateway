@@ -1,21 +1,21 @@
 {
   "plugins_enabled": [
-    "default",
-    "portkey",
-    "qualifire",
-    "aporia",
-    "sydelabs",
-    "pillar",
-    "patronus",
-    "pangea",
-    "promptsecurity",
-    "panw-prisma-airs",
-    "walledai"
+    "default"
   ],
-  "credentials": {
-    "portkey": {
-      "apiKey": "..."
+  "cache": false,
+  "integrations": [
+    {
+      "provider": "openai",
+      "slug": "openai"
+    },
+    {
+      "provider": "anthropic",
+      "slug": "anthropic"
+    },
+    {
+      "provider": "ollama",
+      "slug": "ollama",
+      "base_url": "https://ollama-ozwell-fw.opensource.mieweb.org:8080"
     }
-  },
-  "cache": false
+  ]
 }
