@@ -15,6 +15,7 @@ import { getRuntimeKey } from 'hono/adapter';
 import { requestValidator } from './middlewares/requestValidator';
 import { hooks } from './middlewares/hooks';
 import { memoryCache } from './middlewares/cache';
+import { POWERED_BY } from './globals';
 
 // Handlers
 import { proxyHandler } from './handlers/proxyHandler';
@@ -41,6 +42,26 @@ import { logger } from './apm';
 // Config
 import conf from '../conf.json';
 import { createCacheBackendsRedis } from './shared/services/cache';
+
+// Build a lookup map from conf.json integrations: provider -> apiKey
+// API keys are loaded from environment variables for security
+const integrationKeyMap: Record<string, { apiKey: string; baseUrl?: string }> =
+  {};
+if ((conf as any).integrations) {
+  for (const integration of (conf as any).integrations) {
+    if (integration.provider) {
+      // Try to load API key from environment variable first
+      const envKeyName = `${integration.provider.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+      const apiKey =
+        integration.credentials?.apiKey || process.env[envKeyName] || '';
+
+      integrationKeyMap[integration.provider] = {
+        apiKey,
+        baseUrl: integration.base_url,
+      };
+    }
+  }
+}
 
 // Create a new Hono server instance
 const app = new Hono();
@@ -93,6 +114,88 @@ app.get('/', (c) => c.text('AI Gateway says hey!'));
 
 // Use prettyJSON middleware for all routes
 app.use('*', prettyJSON());
+
+// --- Gateway API Key Authentication ---
+// Requires a valid x-gateway-api-key header on all API routes.
+// Keys are loaded from the GATEWAY_API_KEYS env var (comma-separated).
+// The /public/ UI route is excluded so the dashboard still works.
+const validGatewayKeys = new Set(
+  (process.env.GATEWAY_API_KEYS || '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean)
+);
+
+app.use('*', async (c: Context, next) => {
+  // Skip auth for the UI dashboard and health check
+  const path = new URL(c.req.url).pathname;
+  if (path === '/' || path.startsWith('/public')) {
+    return next();
+  }
+
+  // If no keys are configured, skip auth (don't lock yourself out)
+  if (validGatewayKeys.size === 0) {
+    return next();
+  }
+
+  const apiKey = c.req.header('x-gateway-api-key');
+  if (!apiKey || !validGatewayKeys.has(apiKey)) {
+    return c.json(
+      {
+        error: {
+          message: 'Unauthorized: invalid or missing x-gateway-api-key',
+          type: 'authentication_error',
+        },
+      },
+      401
+    );
+  }
+
+  return next();
+});
+
+// Middleware to inject API keys from conf.json integrations
+app.use('*', async (c: Context, next) => {
+  const provider = c.req.header(`x-${POWERED_BY}-provider`);
+  const authHeader = c.req.header('authorization');
+
+  // Only inject if provider is specified and no auth header is provided (or it's a dummy key)
+  if (provider && integrationKeyMap[provider]) {
+    const integration = integrationKeyMap[provider];
+
+    if (integration.apiKey && (!authHeader || authHeader === 'Bearer ')) {
+      // Create new headers with the injected API key
+      const newHeaders = new Headers(c.req.raw.headers);
+      newHeaders.set('Authorization', `Bearer ${integration.apiKey}`);
+
+      // Replace the request with updated headers
+      const newRequest = new Request(c.req.raw.url, {
+        method: c.req.raw.method,
+        headers: newHeaders,
+        body: c.req.raw.body,
+        // @ts-ignore
+        duplex: 'half',
+      });
+      c.req.raw = newRequest;
+    }
+
+    if (integration.baseUrl && !c.req.header(`x-${POWERED_BY}-custom-host`)) {
+      const newHeaders = new Headers(c.req.raw.headers);
+      newHeaders.set(`x-${POWERED_BY}-custom-host`, integration.baseUrl);
+
+      const newRequest = new Request(c.req.raw.url, {
+        method: c.req.raw.method,
+        headers: newHeaders,
+        body: c.req.raw.body,
+        // @ts-ignore
+        duplex: 'half',
+      });
+      c.req.raw = newRequest;
+    }
+  }
+
+  return next();
+});
 
 // Use logger middleware for all routes
 if (getRuntimeKey() === 'node') {
