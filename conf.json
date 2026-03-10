@@ -15,7 +15,7 @@
     {
       "provider": "ollama",
       "slug": "ollama",
-      "base_url": "https://ollama-ozwell-fw.opensource.mieweb.org:8080"
+      "base_url": "https://ollama-ozwell-fw.opensource.mieweb.org"
     }
   ]
 }

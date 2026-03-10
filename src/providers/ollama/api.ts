@@ -31,6 +31,9 @@ const OllamaAPIConfig: ProviderAPIConfig = {
         return '';
     }
   },
+  getProxyEndpoint: ({ reqPath, reqQuery }) => {
+    return `/v1${reqPath}${reqQuery}`;
+  },
 };
 
 export default OllamaAPIConfig;
