@@ -163,8 +163,8 @@ app.use('*', async (c: Context, next) => {
   if (provider && integrationKeyMap[provider]) {
     const integration = integrationKeyMap[provider];
 
-    if (integration.apiKey && (!authHeader || authHeader === 'Bearer ')) {
-      // Create new headers with the injected API key
+    if (integration.apiKey) {
+      // Always use stored key — strip any client-sent Authorization header
       const newHeaders = new Headers(c.req.raw.headers);
       newHeaders.set('Authorization', `Bearer ${integration.apiKey}`);
 
