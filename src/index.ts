@@ -116,7 +116,7 @@ app.get('/', (c) => c.text('AI Gateway says hey!'));
 app.use('*', prettyJSON());
 
 // --- Gateway API Key Authentication ---
-// Requires a valid x-gateway-api-key header on all API routes.
+// Requires a valid Authorization: Bearer <key> header on all API routes.
 // Keys are loaded from the GATEWAY_API_KEYS env var (comma-separated).
 // The /public/ UI route is excluded so the dashboard still works.
 const validGatewayKeys = new Set(
@@ -138,12 +138,14 @@ app.use('*', async (c: Context, next) => {
     return next();
   }
 
-  const apiKey = c.req.header('x-gateway-api-key');
+  const authHeader = c.req.header('authorization') || '';
+  const apiKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
   if (!apiKey || !validGatewayKeys.has(apiKey)) {
     return c.json(
       {
         error: {
-          message: 'Unauthorized: invalid or missing x-gateway-api-key',
+          message:
+            'Unauthorized: invalid or missing Authorization Bearer token',
           type: 'authentication_error',
         },
       },

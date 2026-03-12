@@ -92,9 +92,22 @@ function constructRequestHeaders(
   if (fn === 'proxy') {
     const poweredByHeadersPattern = `x-${POWERED_BY}-`;
     const headersToAvoidForCloudflare = ['expect'];
+    // Hop-by-hop headers must not be forwarded by proxies (RFC 2616 §13.5.1).
+    // Node.js undici fetch rejects these (e.g. "invalid connection header").
+    const hopByHopHeaders = [
+      'connection',
+      'keep-alive',
+      'proxy-authenticate',
+      'proxy-authorization',
+      'te',
+      'trailer',
+      'transfer-encoding',
+      'upgrade',
+    ];
     const headersToIgnore = [
       ...(env(c).CUSTOM_HEADERS_TO_IGNORE ?? []),
       ...headersToAvoidForCloudflare,
+      ...hopByHopHeaders,
     ];
     headersToIgnore.push('content-length');
     Object.keys(requestHeaders).forEach((key: string) => {
