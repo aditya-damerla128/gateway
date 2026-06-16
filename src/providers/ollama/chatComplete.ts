@@ -95,6 +95,11 @@ export interface OllamaStreamChunk {
   created: number;
   model: string;
   system_fingerprint: string;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  } | null;
   choices: {
     delta: {
       role: string;
@@ -154,6 +159,7 @@ export const OllamaChatCompleteStreamChunkTransform: (
       model: parsedChunk.model,
       provider: OLLAMA,
       choices: parsedChunk.choices,
+      ...(parsedChunk.usage ? { usage: parsedChunk.usage } : {}),
     })}` + '\n\n'
   );
 };
