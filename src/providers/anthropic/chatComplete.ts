@@ -444,6 +444,12 @@ export const AnthropicChatCompleteConfig: ProviderConfig = {
     default: 1,
     min: 0,
     max: 1,
+    transform: (params: Params) => {
+      if (params.thinking?.type === 'enabled') {
+        return undefined;
+      }
+      return params.temperature;
+    },
   },
   top_p: {
     param: 'top_p',
@@ -483,7 +489,15 @@ interface AnthropicToolContentItem {
   input: Record<string, any>;
 }
 
-type AnthropicContentItem = AnthorpicTextContentItem | AnthropicToolContentItem;
+interface AnthropicThinkingContentItem {
+  type: 'thinking';
+  thinking: string;
+}
+
+type AnthropicContentItem =
+  | AnthorpicTextContentItem
+  | AnthropicToolContentItem
+  | AnthropicThinkingContentItem;
 
 export interface AnthropicChatCompleteResponse {
   id: string;
@@ -507,6 +521,7 @@ export interface AnthropicChatCompleteStreamResponse {
   delta: {
     type?: string;
     text?: string;
+    thinking?: string;
     partial_json?: string;
     stop_reason?: ANTHROPIC_STOP_REASON;
   };
@@ -514,6 +529,7 @@ export interface AnthropicChatCompleteStreamResponse {
     type: string;
     id?: string;
     text?: string;
+    thinking?: string;
     name?: string;
     input?: {};
   };
@@ -563,9 +579,12 @@ export const getAnthropicChatCompleteResponseTransform = (provider: string) => {
         cache_creation_input_tokens || cache_read_input_tokens;
 
       let content: string = '';
+      let reasoningContent: string = '';
       response.content.forEach((item) => {
         if (item.type === 'text') {
           content += item.text;
+        } else if (item.type === 'thinking') {
+          reasoningContent += item.thinking;
         }
       });
 
@@ -594,6 +613,7 @@ export const getAnthropicChatCompleteResponseTransform = (provider: string) => {
             message: {
               role: 'assistant',
               content,
+              ...(reasoningContent && { reasoning_content: reasoningContent }),
               ...(!strictOpenAiCompliance && {
                 content_blocks: response.content.filter(
                   (item) => item.type !== 'tool_use'
@@ -796,6 +816,7 @@ export const getAnthropicStreamChunkTransform = (provider: string) => {
     }
 
     const content = parsedChunk.delta?.text;
+    const reasoningContent = parsedChunk.delta?.thinking;
 
     const contentBlockObject = {
       index: parsedChunk.index,
@@ -814,6 +835,9 @@ export const getAnthropicStreamChunkTransform = (provider: string) => {
           {
             delta: {
               content,
+              ...(reasoningContent !== undefined && {
+                reasoning_content: reasoningContent,
+              }),
               tool_calls: toolCalls.length ? toolCalls : undefined,
               ...(!strictOpenAiCompliance &&
                 !toolCalls.length && {
